@@ -17,7 +17,7 @@ irm https://wsh66660.github.io/atomcode-auto/install.ps1 | iex
 ```
 
 > 前置要求：本机需已安装 [atomcode](https://atomcode.atomgit.com/docs/zh/index.html)。
-> 安装脚本会把主脚本下载到 `~/local/bin/`（与 atomcode 本体同目录，已在 PATH 中，无需额外配置）。
+> 安装脚本会把主脚本下载到 `~/.local/bin/`（与 atomcode 本体同目录，已在 PATH 中，无需额外配置）。
 
 ## 使用
 
