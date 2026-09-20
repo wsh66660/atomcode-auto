@@ -2,7 +2,8 @@
 # atomcode-auto — 查询 CodingPlan 额度用量，支持多账户查看与手动切换
 # 用法:
 #   atomcode-auto            # 查看所有账户用量，然后正常启动 atomcode
-#   atomcode-auto use <name> # 切换到指定账户（如 use A / use B）
+#   atomcode-auto login <别名>  # 登出 → OAuth 登录 → 存快照（别名自取，自动记录用户名）
+#   atomcode-auto use <别名>    # 切换到指定账户
 #   atomcode-auto status     # 只查看用量，不启动
 #   atomcode-auto <args...>  # 其余参数原样传给 atomcode
 
@@ -10,16 +11,28 @@ DIR=~/.atomcode/accounts
 AUTH=~/.atomcode/auth.toml
 API='https://web-api.gitcode.com/widget/api/v1/token_usage/codingplan_token_usage'
 
+mkdir -p "$DIR"
+
+# 从快照文件读取记录的真实用户名（login 时写入文件头注释）
+saved_user() {
+  grep -m1 '^# user: ' "$1" 2>/dev/null | sed 's/^# user: //'
+}
+
+# 当前 auth.toml 的用户名
+current_user() {
+  grep '^username' "$AUTH" 2>/dev/null | sed 's/.*"\(.*\)"/\1/'
+}
+
 usage() {
   local name=$1 file=$2
-  local token
+  local token user out
+  user=$(saved_user "$file")
   token=$(grep '^access_token' "$file" | sed 's/.*"\(.*\)"/\1/')
-  local out
   out=$(curl -sS --max-time 10 "$API" \
     -H 'Origin: https://gitcode.com' -H 'Referer: https://gitcode.com/' \
     -H 'User-Agent: Mozilla/5.0' -H 'x-app-channel: gitcode-fe' -H 'x-platform: web' \
     -b "GITCODE_ACCESS_TOKEN=$token")
-  printf '  %-10s %s\n' "$name" "$(echo "$out" | python3 -c "
+  printf '  %-12s (%s)  %s\n' "$name" "${user:-未知用户}" "$(echo "$out" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)['current_usage']
@@ -29,7 +42,7 @@ except Exception as e:
 }
 
 show_all() {
-  echo "当前: $(grep '^username' $AUTH | sed 's/.*"\(.*\)"/\1/')"
+  echo "当前: $(current_user)"
   for f in "$DIR"/*.toml; do
     [[ -f "$f" ]] || continue
     usage "$(basename "$f" .toml)" "$f"
@@ -38,21 +51,36 @@ show_all() {
 
 case "$1" in
   login)
-    [[ -n "$2" ]] || { echo "用法: $0 login <账户名>"; exit 1; }
+    [[ -n "$2" ]] || { echo "用法: $0 login <别名>"; exit 1; }
     atomcode logout
     atomcode login   # 浏览器完成 OAuth 授权
-    cp "$AUTH" "$DIR/$2.toml"
-    echo "已保存为账户 $2 ($(grep '^username' $AUTH | sed 's/.*"\(.*\)"/\1/'))"
+    if ! cp "$AUTH" "$DIR/$2.toml"; then
+      echo "错误: 保存快照失败 ($DIR/$2.toml)" >&2
+      exit 1
+    fi
+    # 在快照头部记录真实用户名，供 status 显示
+    sed -i '' "1i\\
+# user: $(current_user)
+" "$DIR/$2.toml" 2>/dev/null || sed -i "1i\\
+# user: $(current_user)
+" "$DIR/$2.toml"
+    echo "已保存为账户 $2 ($(current_user))"
     exit 0 ;;
   status) show_all; exit 0 ;;
   use)
     if [[ -z "$2" ]]; then
-      echo "用法: $0 use <账户名>。现有账户:"; ls "$DIR" 2>/dev/null | sed 's/\.toml$//; s/^/  /'
+      echo "用法: $0 use <别名>。现有账户:"; show_all
       exit 0
     fi
-    [[ -f "$DIR/$2.toml" ]] || { echo "无此账户快照: $2 ($DIR/$2.toml)"; exit 1; }
-    cp "$DIR/$2.toml" "$AUTH"
-    echo "已切换到 $2 ($(grep '^username' $AUTH | sed 's/.*"\(.*\)"/\1/'))"
+    if [[ ! -f "$DIR/$2.toml" ]]; then
+      echo "无此账户快照: $2 ($DIR/$2.toml)。现有账户:"; show_all
+      exit 1
+    fi
+    if ! cp "$DIR/$2.toml" "$AUTH"; then
+      echo "错误: 切换失败，无法写入 $AUTH" >&2
+      exit 1
+    fi
+    echo "已切换到 $2 ($(saved_user "$DIR/$2.toml" || current_user))"
     exit 0 ;;
 esac
 
