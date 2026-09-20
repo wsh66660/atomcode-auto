@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>atomcode-auto — CodingPlan 多账户额度管理工具</title>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --border: #2a2e3d;
+    --text: #e6e8ee; --muted: #9aa0b0; --accent: #5b9dff;
+    --code-bg: #12141c; --green: #4ade80;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.7;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+  header { text-align: center; margin-bottom: 48px; }
+  h1 { font-size: 2.2em; margin-bottom: 8px; }
+  h1 code { color: var(--accent); background: none; }
+  .tagline { color: var(--muted); font-size: 1.1em; }
+  h2 {
+    font-size: 1.35em; margin: 40px 0 16px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px 24px; margin-bottom: 16px;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 18px; overflow-x: auto;
+    font-size: 0.92em; margin: 12px 0; position: relative;
+  }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; color: #cfe3ff; }
+  p code, li code {
+    background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 0.9em;
+  }
+  .label { font-size: 0.85em; color: var(--muted); margin-bottom: 4px; }
+  ul { padding-left: 24px; }
+  li { margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; }
+  th { background: var(--code-bg); }
+  .warn {
+    border-left: 3px solid #f59e0b; background: #1f1a10;
+    padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 16px 0;
+  }
+  .ok { color: var(--green); }
+  footer { text-align: center; color: var(--muted); margin-top: 56px; font-size: 0.9em; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1><code>atomcode-auto</code></h1>
+  <p class="tagline">atomcode CodingPlan 多账户额度查询与切换工具</p>
+</header>
+
+<h2>这是什么</h2>
+<div class="card">
+  <p>atomcode 的 CodingPlan 免费额度按 <strong>5 小时滚动窗口</strong> 计量。如果你有多个 AtomGit 账号，
+  这个工具可以：</p>
+  <ul>
+    <li>📊 一条命令查看<strong>所有账户</strong>的当前窗口用量、重置时间</li>
+    <li>🔄 一键<strong>切换</strong>到额度充足的账户（复制凭证快照到 <code>auth.toml</code>）</li>
+    <li>🚀 启动 atomcode 前自动展示用量，参数原样透传</li>
+  </ul>
+</div>
+
+<h2>安装</h2>
+<div class="card">
+  <p class="label">macOS / Linux</p>
+  <pre><code>curl -fsSL https://wsh66660.github.io/atomcode-auto/install.sh | bash</code></pre>
+  <p class="label">Windows（PowerShell）</p>
+  <pre><code>irm https://wsh66660.github.io/atomcode-auto/install.ps1 | iex</code></pre>
+  <p>前置要求：本机需已安装 <a href="https://atomcode.atomgit.com/docs/zh/index.html" target="_blank">atomcode</a>。
+  安装脚本会自动下载主脚本到 <code>~/bin/</code>、配置 PATH 并做安装检查。</p>
+</div>
+
+<h2>使用</h2>
+<div class="card">
+  <p><span class="ok">①</span> <strong>添加账户</strong>（每个账户只需一次，自动完成登出 → OAuth 登录 → 存快照）：</p>
+  <pre><code>atomcode-auto login A    # 第一个账号
+atomcode-auto login B    # 下一个账号</code></pre>
+
+  <p><span class="ok">②</span> <strong>查看各账户用量</strong>：</p>
+  <pre><code>$ atomcode-auto status
+当前: w771920097
+  w771920097  52%   重置 10:45
+  B           100%  重置 12:30</code></pre>
+
+  <p><span class="ok">③</span> <strong>切换账户</strong>：</p>
+  <pre><code>atomcode-auto use B      # 切到 B，下次启动 atomcode 生效
+atomcode-auto use        # 忘记名字时，列出所有已存账户</code></pre>
+
+  <p><span class="ok">④</span> <strong>日常启动</strong>（先展示用量，再启动 atomcode，参数透传）：</p>
+  <pre><code>atomcode-auto            # 等价于查看用量 + 启动 atomcode
+atomcode-auto -c         # 继续上次会话</code></pre>
+</div>
+
+<h2>工作原理</h2>
+<div class="card">
+  <ul>
+    <li>每个账户登录后，凭证快照存于 <code>~/.atomcode/accounts/&lt;名字&gt;.toml</code></li>
+    <li><code>use</code> 即把对应快照复制为 <code>~/.atomcode/auth.toml</code>，atomcode 启动时读取的就是它</li>
+    <li>用量数据来自 GitCode 接口 <code>codingplan_token_usage</code>（以当前 auth.toml 的 access_token 查询）</li>
+  </ul>
+</div>
+
+<h2>注意事项</h2>
+<div class="warn">
+  <ul>
+    <li><code>~/.atomcode/accounts/</code> 下是账号凭证，<strong>不要外泄该目录</strong>或将其提交到仓库</li>
+    <li>token 过期后重新 <code>atomcode-auto login &lt;名字&gt;</code> 刷新即可</li>
+    <li>切换仅对<strong>新启动</strong>的 atomcode 会话生效，运行中的会话需退出重进</li>
+    <li>仅适用于 AtomGit CodingPlan（OAuth 登录）方式，不适用于 API Key 方式</li>
+  </ul>
+</div>
+
+<h2>文件清单</h2>
+<div class="card">
+  <table>
+    <tr><th>文件</th><th>说明</th></tr>
+    <tr><td><a href="atomcode-auto">atomcode-auto</a></td><td>主脚本（bash，macOS / Linux）</td></tr>
+    <tr><td><a href="install.sh">install.sh</a></td><td>macOS / Linux 一键安装</td></tr>
+    <tr><td><a href="install.ps1">install.ps1</a></td><td>Windows 一键安装</td></tr>
+    <tr><td><a href="README.md">README.md</a></td><td>Markdown 版文档</td></tr>
+  </table>
+</div>
+
+<footer>
+  atomcode-auto · 安装后先执行 <code>atomcode-auto login &lt;账户名&gt;</code> 添加第一个账户
+</footer>
+
+</div>
+</body>
+</html>

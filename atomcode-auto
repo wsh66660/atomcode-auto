@@ -1,0 +1,60 @@
+#!/bin/bash
+# atomcode-auto — 查询 CodingPlan 额度用量，支持多账户查看与手动切换
+# 用法:
+#   atomcode-auto            # 查看所有账户用量，然后正常启动 atomcode
+#   atomcode-auto use <name> # 切换到指定账户（如 use A / use B）
+#   atomcode-auto status     # 只查看用量，不启动
+#   atomcode-auto <args...>  # 其余参数原样传给 atomcode
+
+DIR=~/.atomcode/accounts
+AUTH=~/.atomcode/auth.toml
+API='https://web-api.gitcode.com/widget/api/v1/token_usage/codingplan_token_usage'
+
+usage() {
+  local name=$1 file=$2
+  local token
+  token=$(grep '^access_token' "$file" | sed 's/.*"\(.*\)"/\1/')
+  local out
+  out=$(curl -sS --max-time 10 "$API" \
+    -H 'Origin: https://gitcode.com' -H 'Referer: https://gitcode.com/' \
+    -H 'User-Agent: Mozilla/5.0' -H 'x-app-channel: gitcode-fe' -H 'x-platform: web' \
+    -b "GITCODE_ACCESS_TOKEN=$token")
+  printf '  %-10s %s\n' "$name" "$(echo "$out" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)['current_usage']
+    print(f\"{d['usage_percent']}%  重置 {d['reset_at_display'] or d['reset_at']}\")
+except Exception as e:
+    print(f'查询失败({e})')")"
+}
+
+show_all() {
+  echo "当前: $(grep '^username' $AUTH | sed 's/.*"\(.*\)"/\1/')"
+  for f in "$DIR"/*.toml; do
+    [[ -f "$f" ]] || continue
+    usage "$(basename "$f" .toml)" "$f"
+  done
+}
+
+case "$1" in
+  login)
+    [[ -n "$2" ]] || { echo "用法: $0 login <账户名>"; exit 1; }
+    atomcode logout
+    atomcode login   # 浏览器完成 OAuth 授权
+    cp "$AUTH" "$DIR/$2.toml"
+    echo "已保存为账户 $2 ($(grep '^username' $AUTH | sed 's/.*"\(.*\)"/\1/'))"
+    exit 0 ;;
+  status) show_all; exit 0 ;;
+  use)
+    if [[ -z "$2" ]]; then
+      echo "用法: $0 use <账户名>。现有账户:"; ls "$DIR" 2>/dev/null | sed 's/\.toml$//; s/^/  /'
+      exit 0
+    fi
+    [[ -f "$DIR/$2.toml" ]] || { echo "无此账户快照: $2 ($DIR/$2.toml)"; exit 1; }
+    cp "$DIR/$2.toml" "$AUTH"
+    echo "已切换到 $2 ($(grep '^username' $AUTH | sed 's/.*"\(.*\)"/\1/'))"
+    exit 0 ;;
+esac
+
+show_all
+exec atomcode "$@"
